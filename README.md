@@ -12,7 +12,31 @@ way nothing restarts the process, because each server is a live
 > See [PORTING.md](./PORTING.md) for the incompatibilities the older 0.1.x code
 > had to fix in order to load on 0.2, and the 0.2.2-rc.3 adaptation.
 
-> **Author:** 作者未公开 *(not disclosed yet)*
+> **Author:** liujianqiao701 ([github.com/liujianqiao701](https://github.com/liujianqiao701)).
+> Based on an anonymous MIT-licensed v0.1.x upstream; this fork ported it to DSH 0.2
+> and reworked the settings page. Attribution is kept in [LICENSE](./LICENSE) and
+> [PORTING.md](./PORTING.md).
+
+## What this fork changes
+
+Ported to DSH 0.2 and then reworked, so it is not a drop-in copy of upstream:
+
+- **Toggling no longer commits your other drafts.** `mcp/save` is a whole-table
+  reconcile, and upstream sent the entire draft table on every toggle — so
+  clicking one switch silently saved every other pending edit. A toggle now
+  submits the saved table plus that one flipped row, and leaves every other
+  draft untouched.
+- **Each in-flight phase has its own badge.** `pending`, `loading` and
+  `unloading` used to collapse into one "Loading" label, which made a queued row
+  and a tearing-down row look identical to a starting one.
+- **Unsaved rows say so.** A row that differs from what is on disk shows an
+  "Unsaved" badge instead of a blank slot.
+- **Editing an unsaved row keeps its content.** Opening a newly added, not-yet-saved
+  server for editing used to fall back to a blank "new server" form and drop what
+  you had typed; it now edits the draft row.
+- **The hot-reload window is explained.** Save shows what is happening during the
+  1–4 s restart instead of appearing frozen, and a partial failure says that
+  earlier entries may already be live (`save` is reconcile, not a transaction).
 
 ## What it does
 

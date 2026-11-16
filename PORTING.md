@@ -255,6 +255,86 @@ for (const packageName of row.inject) {
 - 编辑器不暴露 `reconnect` 块（启停与其他服务器编辑会保留它，但面板看不到、改不了）；
 - MCP 的 resources / prompts 不在面板范围内，仍需直接改 `cordis.patch.yml`；
 - **Save 是 reconcile、不是事务**：操作顺序应用，后续条目失败时前面的已经生效。
-- **启停会连带提交其他草稿**（本 fork 改动的固有取舍）：因为 `mcp/save` 是整表 reconcile，
-  点开关时会把当前草稿表**一并**提交。若你已把别的服务改动提交进草稿表但还没点「保存」，
-  那次改动也会跟着落盘。**编辑器里尚未点完成/确定**的改动不在草稿表内，不受影响。
+  （界面已就这一点给出明确提示，见第六节第 3 条。）
+- ~~**启停会连带提交其他草稿**~~ —— **本 fork 已修掉**，见第六节第 1 条。
+
+---
+
+## 六、2026-11-16 重开发：修掉上游的 4 个交互缺陷
+
+移植完成后又做了一轮实质重开发，目标是让这个 fork 与「只是能加载」区分开。四处改动都
+同时落在**两份产物**上——`lib/client.js`（浏览器真正加载的打包产物）与
+`lib/client/McpSettingsSection.js` / `locales.js`（可读源副本），两边保持一致。
+
+### 1. 启停不再连带提交其他未保存草稿（P1，数据安全）
+
+**根因**：`McpRuntime.save()` 是**整表 reconcile**——它按传入的 `servers` 数组对 loader 树
+做 `remove` / `update` / `create`，host 侧无法分辨「用户只想改这一行」。而上游的
+`toggleServer` 把整张 `drafts` 表发了过去：
+
+```js
+const toggleServer = (id) => {
+    const next = drafts.map(...);   // ← 整张草稿表
+    persist(next, true);            // ← 含所有未保存的新增/编辑
+};
+```
+
+于是「点一下开关」= 「把其他所有待保存改动一并落盘」。而界面又把启停包装成「点一下立即
+生效、不需要保存」，用户完全不会预期它顺手提交别的东西。
+
+**修复**：启停只提交「**已保存的表 + 这一行翻转**」：
+
+```js
+const saved = servers.map(viewToInput);            // 已落盘状态
+const flipped = { ...base, enabled: !base.enabled };
+const next = saved.map((s) => s.id === id ? flipped : s);
+persist(next, true);                               // 其余草稿留在本地
+```
+
+`persist` 成功后也不再 `applyList(result.value)` 整表覆盖草稿（那等于把未提交的草稿抹掉），
+改为**按已提交的 id rebase**：提交过的行换成服务端返回值，没提交的行原样保留。
+
+**已用新旧对比证明**（场景：A/B 已保存，C 是未保存新增，A 的 command 有未保存修改）：
+
+| | 提交行数 | 含未保存的新增 C | 含 A 的未保存 command |
+| --- | --- | --- | --- |
+| 旧实现 | 3 | 是 | 是（`npx-CHANGED` 被写入） |
+| 新实现 | 2 | 否 | 否（仍为已保存的 `npx`） |
+
+### 2. `pending` / `loading` / `unloading` 三个阶段不再折叠成一个文案（P1，可观测性）
+
+`phaseBadge` 原本把三者一起 `return t("status.loading")`，于是 `status.pending` 与
+`status.unloading` 两个字典键是死键。而这三态恰恰是用户最需要区分的：刚点完开关
+（`pending`）、正在启动（`loading`）、正在卸载（`unloading`）。现在各自返回自己的文案。
+
+### 3. 热更新窗口有反馈、部分失败说清楚（P1，反馈）
+
+- `persist` 一进入就把 footer 提示设为「正在应用改动，受影响的服务器会热重启，通常 1–4 秒」
+  （`footer.savingHint`）。原先只是把按钮置灰，1–4 秒的重启窗口看起来像卡死。
+- `save` 失败时文案补上「改动是按条目逐个应用的，失败前的条目可能已经生效」——
+  原先只报「保存失败」，用户会以为什么都没变。
+
+### 4. 编辑未保存的新增行不再丢内容（P2，数据丢失）
+
+行内的「编辑」按钮原本用 `toEditorDraft(view)`，而 `view` 来自**已保存**列表。一个新增但
+还没保存的行 `view === undefined`，于是 `toEditorDraft(undefined)` 返回**空白的「新增服务」
+表单**——用户点「编辑」等于把自己刚输入的内容清空。
+
+**修复**：新增 `inputToEditorDraft(input)`，直接从**草稿行**构造编辑器内容；行内编辑改用
+它，因此未保存的行也能原样打开。
+
+### 附：新增的「未保存」徽章与脏判定
+
+行徽章原先对 `view === undefined` 的行显示**空徽章**。现在加了 `isDraftDirty()`（用
+键序无关的 `stableKey` 做结构化比较），与磁盘不一致的行显示「未保存」；没有 view 的新增行
+也算脏。这样「界面说你没保存」和「`save` 实际会写什么」是同一套判据。
+
+### 本轮验证
+
+- `node --check`：`lib/` 下 16 个 js 全通过；
+- 辅助函数行为验证 14 项全 PASS（`stableKey` 键序无关、`isDraftDirty` 四种输入、
+  `inputToEditorDraft` 8 个字段保留）；
+- 启停新旧对比 11 项全 PASS（含「对未保存新增行点开关」「未知 id 不抛异常」两个边界）；
+- locale 键集：zh/en 各 53 键，无单边键，占位符一致，bundle 内嵌副本已同步；
+- `tools/verify-host.mjs`（真 cordis + 真 typert 校验器 + 真 McpRuntime）全部 PASS；
+- **仍未验证**：`0.2.2-rc.3` 上的真实浏览器端到端点击（需重启 DSH 后人工过一遍）。

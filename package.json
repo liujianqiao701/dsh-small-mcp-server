@@ -1,9 +1,30 @@
 {
   "name": "dsh-small-mcp-server",
   "version": "0.2.2",
-  "description": "DSH 0.2.2 设置面板里的 MCP 服务器管理器：列出 / 新增 / 编辑 / 删除 / 启停 loader 中的 dsh-mcp-client 条目——启停点一下立即生效，其余改动保存后热更新。",
+  "description": "MCP server manager in the DSH settings panel: list, add, edit, remove and toggle the dsh-mcp-client entries held by the loader. Toggling applies immediately; every other change is saved as a draft and hot-reloaded, with unsaved drafts never committed behind your back.",
   "type": "module",
   "license": "MIT",
+  "author": "liujianqiao701 (https://github.com/liujianqiao701)",
+  "contributors": [
+    "anonymous authors of the original dsh-small-mcp-server v0.1.x (upstream)"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liujianqiao701/dsh-small-mcp-server.git"
+  },
+  "homepage": "https://github.com/liujianqiao701/dsh-small-mcp-server#readme",
+  "bugs": {
+    "url": "https://github.com/liujianqiao701/dsh-small-mcp-server/issues"
+  },
+  "keywords": [
+    "deepseek",
+    "harness",
+    "dsh",
+    "dsh-plugin",
+    "mcp",
+    "model-context-protocol",
+    "settings"
+  ],
   "main": "lib/index.js",
   "types": "lib/types/index.d.ts",
   "exports": {
